@@ -1,112 +1,153 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+// React core + hooks
+import React, { useEffect, useState } from "react";
 
-import { Collapsible } from '@/components/ui/collapsible';
-import { ExternalLink } from '@/components/external-link';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Fonts } from '@/constants/theme';
+// React Native UI components
+import { ActivityIndicator, FlatList, Text, View } from "react-native";
 
-export default function TabTwoScreen() {
+// Supabase client for database access
+import { supabase } from "../../src/lib/supabase";
+
+//////////////////////////////////////////////////////
+// TYPE DEFINITIONS
+//////////////////////////////////////////////////////
+
+// Represents one game record from Supabase "games" table
+type Game = {
+  id: string;
+  title: string;
+  starts_at: string;
+  location_name: string | null;
+};
+
+//////////////////////////////////////////////////////
+// MAIN EXPLORE SCREEN COMPONENT
+//////////////////////////////////////////////////////
+
+export default function ExploreScreen() {
+  //////////////////////////////////////////////////////
+  // STATE VARIABLES
+  //////////////////////////////////////////////////////
+
+  // List of games fetched from Supabase
+  const [games, setGames] = useState<Game[]>([]);
+
+  // Controls loading spinner while data is being fetched
+  const [loading, setLoading] = useState(true);
+
+  // Stores any error message returned from Supabase
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  //////////////////////////////////////////////////////
+  // FETCH GAMES WHEN SCREEN LOADS
+  //////////////////////////////////////////////////////
+
+  useEffect(() => {
+    const run = async () => {
+      setLoading(true);
+      setErrorMsg(null);
+
+      //////////////////////////////////////////////////////
+      // QUERY SUPABASE DATABASE
+      //////////////////////////////////////////////////////
+      // Pull up to 20 games ordered by start time
+      // This is mainly used as a connection test / preview
+      const { data, error } = await supabase
+        .from("games")
+        .select("id,title,starts_at,location_name")
+        .order("starts_at", { ascending: true })
+        .limit(20);
+
+      //////////////////////////////////////////////////////
+      // HANDLE RESULT
+      //////////////////////////////////////////////////////
+
+      if (error) {
+        // If Supabase returns an error, store message + clear games
+        setErrorMsg(error.message);
+        setGames([]);
+      } else {
+        // Otherwise, store returned games into state
+        setGames((data ?? []) as Game[]);
+      }
+
+      setLoading(false);
+    };
+
+    // Run the fetch function once when component mounts
+    run();
+  }, []);
+
+  //////////////////////////////////////////////////////
+  // UI RENDER
+  //////////////////////////////////////////////////////
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
-      headerImage={
-        <IconSymbol
-          size={310}
-          color="#808080"
-          name="chevron.left.forwardslash.chevron.right"
-          style={styles.headerImage}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText
-          type="title"
+    <View style={{ flex: 1, padding: 18 }}>
+      {/* Screen Title */}
+      <Text style={{ fontSize: 22, fontWeight: "800" }}>Supabase Test</Text>
+      {/* Description */}
+      <Text style={{ marginTop: 6, color: "#555" }}>
+        Pulling up to 20 games from your database.
+      </Text>
+
+      {/*LOADING STATE*/}
+      {loading && (
+        <View
           style={{
-            fontFamily: Fonts.rounded,
-          }}>
-          Explore
-        </ThemedText>
-      </ThemedView>
-      <ThemedText>This app includes example code to help you get started.</ThemedText>
-      <Collapsible title="File-based routing">
-        <ThemedText>
-          This app has two screens:{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/explore.tsx</ThemedText>
-        </ThemedText>
-        <ThemedText>
-          The layout file in <ThemedText type="defaultSemiBold">app/(tabs)/_layout.tsx</ThemedText>{' '}
-          sets up the tab navigator.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/router/introduction">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Android, iOS, and web support">
-        <ThemedText>
-          You can open this project on Android, iOS, and the web. To open the web version, press{' '}
-          <ThemedText type="defaultSemiBold">w</ThemedText> in the terminal running this project.
-        </ThemedText>
-      </Collapsible>
-      <Collapsible title="Images">
-        <ThemedText>
-          For static images, you can use the <ThemedText type="defaultSemiBold">@2x</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">@3x</ThemedText> suffixes to provide files for
-          different screen densities
-        </ThemedText>
-        <Image
-          source={require('@/assets/images/react-logo.png')}
-          style={{ width: 100, height: 100, alignSelf: 'center' }}
-        />
-        <ExternalLink href="https://reactnative.dev/docs/images">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Light and dark mode components">
-        <ThemedText>
-          This template has light and dark mode support. The{' '}
-          <ThemedText type="defaultSemiBold">useColorScheme()</ThemedText> hook lets you inspect
-          what the user&apos;s current color scheme is, and so you can adjust UI colors accordingly.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/develop/user-interface/color-themes/">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Animations">
-        <ThemedText>
-          This template includes an example of an animated component. The{' '}
-          <ThemedText type="defaultSemiBold">components/HelloWave.tsx</ThemedText> component uses
-          the powerful{' '}
-          <ThemedText type="defaultSemiBold" style={{ fontFamily: Fonts.mono }}>
-            react-native-reanimated
-          </ThemedText>{' '}
-          library to create a waving hand animation.
-        </ThemedText>
-        {Platform.select({
-          ios: (
-            <ThemedText>
-              The <ThemedText type="defaultSemiBold">components/ParallaxScrollView.tsx</ThemedText>{' '}
-              component provides a parallax effect for the header image.
-            </ThemedText>
-          ),
-        })}
-      </Collapsible>
-    </ParallaxScrollView>
+            marginTop: 14,
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 10,
+          }}
+        >
+          <ActivityIndicator />
+          <Text>Loading…</Text>
+        </View>
+      )}
+      {/*ERROR STATE*/}
+      {errorMsg && (
+        <Text style={{ marginTop: 14, color: "crimson" }}>
+          Error: {errorMsg}
+        </Text>
+      )}
+      {/*GAME LIST*/}
+      <FlatList
+        style={{ marginTop: 14 }}
+        // Data source
+        data={games}
+        // Unique key for each item
+        keyExtractor={(item) => item.id}
+        // How each game item is rendered
+        renderItem={({ item }) => (
+          <View
+            style={{
+              paddingVertical: 10,
+              borderBottomWidth: 1,
+              borderBottomColor: "#eee",
+            }}
+          >
+            {/* Game title */}
+            <Text style={{ fontWeight: "700" }}>{item.title}</Text>
+
+            {/* Location + time */}
+            <Text style={{ color: "#555" }}>
+              {item.location_name ?? "Pinned location"} •{" "}
+              {new Date(item.starts_at).toLocaleString()}
+            </Text>
+          </View>
+        )}
+        //////////////////////////////////////////////////////
+        // EMPTY STATE
+        //////////////////////////////////////////////////////
+        // Shown if no games exist and not loading
+        ListEmptyComponent={
+          !loading ? (
+            <Text style={{ marginTop: 14, color: "#666" }}>
+              No games found yet. Insert one in Supabase to test.
+            </Text>
+          ) : null
+        }
+      />
+    </View>
   );
 }
-
-const styles = StyleSheet.create({
-  headerImage: {
-    color: '#808080',
-    bottom: -90,
-    left: -35,
-    position: 'absolute',
-  },
-  titleContainer: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-});

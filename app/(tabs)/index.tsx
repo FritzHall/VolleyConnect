@@ -1,98 +1,152 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+// Expo Router navigation helper
+import { router } from "expo-router";
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+// React + hooks
+import React, { useEffect, useState } from "react";
+
+// React Native UI components
+import { ActivityIndicator, Pressable, Text, View } from "react-native";
+
+// Supabase client for database access
+import { supabase } from "../../src/lib/supabase";
+
+//////////////////////////////////////////////////////
+// HOME SCREEN
+//////////////////////////////////////////////////////
 
 export default function HomeScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+  //////////////////////////////////////////////////////
+  // STATE
+  //////////////////////////////////////////////////////
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+  // Whether the app is currently loading data
+  const [loading, setLoading] = useState(true);
+
+  // Number of upcoming games (null = not logged in)
+  const [upcomingCount, setUpcomingCount] = useState<number | null>(null);
+
+  //////////////////////////////////////////////////////
+  // LOAD UPCOMING GAME COUNT ON MOUNT
+  //////////////////////////////////////////////////////
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+
+      // Check if user is authenticated
+      // If not logged in, we skip fetching games
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session) {
+        setUpcomingCount(null);
+        setLoading(false);
+        return;
+      }
+
+      // Current time in ISO format
+      // Used to filter out past games
+      const nowIso = new Date().toISOString();
+
+      // Count how many future active games exist
+      const { count, error } = await supabase
+        .from("games")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "active")
+        .gte("starts_at", nowIso);
+
+      // If query succeeds, store the count
+      if (!error) {
+        setUpcomingCount(count ?? 0);
+      }
+
+      setLoading(false);
+    })();
+  }, []);
+
+  //////////////////////////////////////////////////////
+  // UI RENDER
+  //////////////////////////////////////////////////////
+
+  return (
+    <View style={{ flex: 1, padding: 18, justifyContent: "center" }}>
+      {/* App title */}
+      <Text style={{ fontSize: 34, fontWeight: "800" }}>VolleyConnect</Text>
+
+      {/* Short app description */}
+      <Text style={{ marginTop: 10, fontSize: 16, color: "#444" }}>
+        Find nearby pickup volleyball games, join fast, and play.
+      </Text>
+
+      {/* Upcoming games status */}
+      <View style={{ marginTop: 20 }}>
+        {loading ? (
+          // Loading indicator while fetching data
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+            <ActivityIndicator />
+            <Text style={{ color: "#444" }}>Loading…</Text>
+          </View>
+        ) : (
+          // Show count if logged in, otherwise prompt login
+          <Text style={{ color: "#444" }}>
+            {upcomingCount === null
+              ? "Log in to see nearby games."
+              : `Upcoming games: ${upcomingCount}`}
+          </Text>
+        )}
+      </View>
+
+      {/* Main action buttons */}
+      <View style={{ marginTop: 26, gap: 12 }}>
+        {/* Navigate to Auth screen */}
+        <Pressable
+          onPress={() => router.push("../auth")}
+          style={{
+            backgroundColor: "#111",
+            paddingVertical: 14,
+            borderRadius: 14,
+            alignItems: "center",
+          }}
+        >
+          <Text style={{ color: "white", fontWeight: "800", fontSize: 16 }}>
+            Log In
+          </Text>
+        </Pressable>
+
+        {/* Open Map tab */}
+        <Pressable
+          onPress={() => router.push("../(tabs)/map")}
+          style={{
+            backgroundColor: "#111",
+            paddingVertical: 14,
+            borderRadius: 14,
+            alignItems: "center",
+          }}
+        >
+          <Text style={{ color: "white", fontWeight: "800", fontSize: 16 }}>
+            Open Map
+          </Text>
+        </Pressable>
+
+        {/* Navigate to Create Game screen */}
+        <Pressable
+          onPress={() => router.push("../(tabs)/create")}
+          style={{
+            backgroundColor: "#eee",
+            paddingVertical: 14,
+            borderRadius: 14,
+            alignItems: "center",
+          }}
+        >
+          <Text style={{ color: "#111", fontWeight: "800", fontSize: 16 }}>
+            Create a Game
+          </Text>
+        </Pressable>
+      </View>
+
+      {/* Helpful usage tip */}
+      <Text style={{ marginTop: 22, color: "#666", fontSize: 13 }}>
+        Tip: Use the map to pan/zoom. Games refresh automatically based on
+        what’s on-screen.
+      </Text>
+    </View>
   );
 }
-
-const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
-  },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-  },
-});

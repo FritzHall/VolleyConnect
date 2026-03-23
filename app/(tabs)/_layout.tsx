@@ -30,6 +30,9 @@ export default function TabLayout() {
 
   const colorScheme = useColorScheme();
 
+  // Load correct colors from theme file
+  const theme = Colors[colorScheme ?? "light"];
+
   //////////////////////////////////////////////////////
   // AUTH CHECK STATE
   //////////////////////////////////////////////////////
@@ -89,7 +92,16 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         // Active tab color (changes based on light/dark theme)
-        tabBarActiveTintColor: Colors[colorScheme ?? "light"].tint,
+        tabBarActiveTintColor: theme.tint,
+
+        // Optional: set tab bar background to match app theme
+        tabBarStyle: {
+          backgroundColor: theme.card,
+          borderTopColor: theme.border,
+        },
+
+        // Optional: inactive tab color for cleaner contrast
+        tabBarInactiveTintColor: theme.muted,
 
         // Hide top header (we use custom UI instead)
         headerShown: false,

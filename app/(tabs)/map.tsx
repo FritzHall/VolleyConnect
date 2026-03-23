@@ -1,7 +1,7 @@
 // Expo + React imports
 import * as Location from "expo-location";
 import { router } from "expo-router";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -10,6 +10,11 @@ import {
   Text,
   View,
 } from "react-native";
+
+// Theme imports
+import { Colors } from "@/constants/theme";
+import { useColorScheme } from "@/hooks/use-color-scheme";
+
 // Supabase client
 import { supabase } from "../../src/lib/supabase";
 
@@ -63,6 +68,16 @@ function formatStartsAt(iso: string) {
 
 export default function MapScreen() {
   //////////////////////////////////////////////////////
+  // THEME SETUP
+  //////////////////////////////////////////////////////
+
+  // Detect device theme (light or dark)
+  const colorScheme = useColorScheme();
+
+  // Load correct colors from theme file
+  const theme = Colors[colorScheme ?? "light"];
+
+  //////////////////////////////////////////////////////
   // WEB SAFETY FALLBACK
   //////////////////////////////////////////////////////
   // react-native-maps cannot run on web.
@@ -75,19 +90,17 @@ export default function MapScreen() {
           justifyContent: "center",
           alignItems: "center",
           padding: 20,
+          backgroundColor: theme.background,
         }}
       >
-        <Text style={{ fontSize: 18, fontWeight: "800" }}>
+        <Text style={{ fontSize: 18, fontWeight: "800", color: theme.text }}>
           Map is mobile-only
-        </Text>
-        <Text style={{ marginTop: 8, color: "#555", textAlign: "center" }}>
-          Use Expo Go on iOS/Android to view the map.
         </Text>
       </View>
     );
   }
 
-  // Only require native maps on iOS/Android
+  // Load native map only on iOS/Android
   const MapView = require("react-native-maps").default;
   const { Marker } = require("react-native-maps");
 
@@ -96,20 +109,26 @@ export default function MapScreen() {
   //////////////////////////////////////////////////////
 
   const mapRef = useRef<any>(null);
+
   // Location + region
   const [loadingLocation, setLoadingLocation] = useState(true);
   const [region, setRegion] = useState<Region | null>(null);
+
   // Games loaded from Supabase
   const [loadingGames, setLoadingGames] = useState(false);
   const [games, setGames] = useState<Game[]>([]);
+
   // Selected game (when user taps a pin)
   const [selected, setSelected] = useState<Game | null>(null);
+
   // Player count for selected game
   const [playerCount, setPlayerCount] = useState<number | null>(null);
   const [loadingCount, setLoadingCount] = useState(false);
+
   // Join/Leave state
   const [isJoined, setIsJoined] = useState<boolean | null>(null);
   const [joining, setJoining] = useState(false);
+
   // Timer to debounce map movement fetches
   const fetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -120,6 +139,7 @@ export default function MapScreen() {
   useEffect(() => {
     (async () => {
       setLoadingLocation(true);
+
       // Ask permission for location
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
@@ -130,6 +150,7 @@ export default function MapScreen() {
         );
         return;
       }
+
       // Get user's GPS coordinates
       const loc = await Location.getCurrentPositionAsync({});
       const initial: Region = {
@@ -141,6 +162,7 @@ export default function MapScreen() {
 
       setRegion(initial);
       setLoadingLocation(false);
+
       // Load games around user
       await fetchGamesInRegion(initial);
     })();
@@ -157,31 +179,23 @@ export default function MapScreen() {
 
     const { minLat, maxLat, minLng, maxLng } = regionToBounds(r);
 
-    // Only show active games; only future-ish games
-    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-
     const { data, error } = await supabase
       .from("games")
       .select("id,title,starts_at,location_name,lat,lng,max_players,status")
       .eq("status", "active")
-      .gte("starts_at", oneHourAgo)
       .gte("lat", minLat)
       .lte("lat", maxLat)
       .gte("lng", minLng)
-      .lte("lng", maxLng)
-      .order("starts_at", { ascending: true })
-      .limit(200);
+      .lte("lng", maxLng);
 
     setLoadingGames(false);
 
     if (error) {
-      console.log("fetch games error", error);
       Alert.alert("Supabase error", error.message);
-      setGames([]);
       return;
     }
 
-    setGames((data ?? []) as Game[]);
+    setGames(data ?? []);
   }
 
   //////////////////////////////////////////////////////
@@ -208,15 +222,9 @@ export default function MapScreen() {
       setIsJoined(null);
       return;
     }
+
     // if row exists → user joined
     setIsJoined(!!data);
-  }
-
-  function scheduleFetch(r: Region) {
-    if (fetchTimer.current) clearTimeout(fetchTimer.current);
-    fetchTimer.current = setTimeout(() => {
-      fetchGamesInRegion(r).catch((e) => console.log(e));
-    }, 450);
   }
 
   //////////////////////////////////////////////////////
@@ -227,22 +235,18 @@ export default function MapScreen() {
     setSelected(g);
     setPlayerCount(null);
     setLoadingCount(true);
+
     // Check join status
     setIsJoined(null);
     await checkIfJoined(g.id);
+
     // Get total player count
-    const { count, error } = await supabase
+    const { count } = await supabase
       .from("game_players")
       .select("user_id", { count: "exact", head: true })
       .eq("game_id", g.id);
 
     setLoadingCount(false);
-
-    if (error) {
-      console.log("count error", error);
-      setPlayerCount(null);
-      return;
-    }
     setPlayerCount(count ?? 0);
   }
 
@@ -255,18 +259,13 @@ export default function MapScreen() {
 
     const { data: userData } = await supabase.auth.getUser();
     const userId = userData.user?.id;
-    if (!userId) {
-      Alert.alert("Not signed in", "Please sign in again.");
-      return;
-    }
+    if (!userId) return;
 
     const current = playerCount ?? 0;
+
     // Prevent joining full games
     if (current >= selected.max_players) {
-      Alert.alert(
-        "Game full",
-        "This game already has the maximum number of players.",
-      );
+      Alert.alert("Game full", "Max players reached.");
       return;
     }
 
@@ -280,8 +279,6 @@ export default function MapScreen() {
     setJoining(false);
 
     if (error) {
-      // If user already joined, Supabase will throw duplicate PK error; treat as joined
-      console.log("join error", error);
       Alert.alert("Join failed", error.message);
       return;
     }
@@ -299,10 +296,7 @@ export default function MapScreen() {
 
     const { data: userData } = await supabase.auth.getUser();
     const userId = userData.user?.id;
-    if (!userId) {
-      Alert.alert("Not signed in", "Please sign in again.");
-      return;
-    }
+    if (!userId) return;
 
     setJoining(true);
 
@@ -315,7 +309,6 @@ export default function MapScreen() {
     setJoining(false);
 
     if (error) {
-      console.log("leave error", error);
       Alert.alert("Leave failed", error.message);
       return;
     }
@@ -328,148 +321,89 @@ export default function MapScreen() {
   // UI RENDER
   //////////////////////////////////////////////////////
 
-  const headerText = useMemo(() => {
-    if (loadingLocation) return "Getting your location…";
-    if (loadingGames) return "Loading games…";
-    return `${games.length} game(s) in view`;
-  }, [loadingLocation, loadingGames, games.length]);
-
   if (loadingLocation || !region) {
     return (
-      <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-        <ActivityIndicator />
-        <Text style={{ marginTop: 10 }}>{headerText}</Text>
+      <View
+        style={{
+          flex: 1,
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: theme.background,
+        }}
+      >
+        <ActivityIndicator color={theme.tint} />
+        <Text style={{ color: theme.text, marginTop: 8 }}>
+          Getting location…
+        </Text>
       </View>
     );
   }
 
   return (
-    <View style={{ flex: 1 }}>
-      {/* Top status bar */}
-      <View
-        style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          right: 0,
-          zIndex: 10,
-          paddingTop: 60,
-          paddingHorizontal: 12,
-        }}
-      >
-        <View
-          style={{
-            backgroundColor: "rgba(0,0,0,0.7)",
-            borderRadius: 12,
-            padding: 10,
-          }}
-        >
-          <Text style={{ color: "white", fontWeight: "700" }}>
-            {headerText}
-          </Text>
-        </View>
-      </View>
-
+    <View style={{ flex: 1, backgroundColor: theme.background }}>
+      {/* MAP */}
       <MapView
-        ref={(r: any) => {
-          mapRef.current = r;
-        }}
+        ref={(r: any) => (mapRef.current = r)}
         style={{ flex: 1 }}
         initialRegion={region}
-        onRegionChangeComplete={(r: any) => {
-          const next: Region = {
-            latitude: r.latitude,
-            longitude: r.longitude,
-            latitudeDelta: r.latitudeDelta,
-            longitudeDelta: r.longitudeDelta,
-          };
-          setRegion(next);
-          scheduleFetch(next);
-        }}
         showsUserLocation
-        showsMyLocationButton
       >
         {games.map((g) => (
           <Marker
             key={g.id}
             coordinate={{ latitude: g.lat, longitude: g.lng }}
             title={g.title}
-            description={g.location_name ?? undefined}
             onPress={() => onSelectGame(g)}
           />
         ))}
       </MapView>
 
-      {/* Bottom preview card */}
+      {/* BOTTOM CARD */}
       {selected && (
         <View style={{ position: "absolute", left: 12, right: 12, bottom: 18 }}>
           <View
             style={{
-              backgroundColor: "white",
+              backgroundColor: theme.card,
               borderRadius: 16,
               padding: 14,
-              elevation: 4,
+              borderWidth: 1,
+              borderColor: theme.border,
             }}
           >
-            <Text style={{ fontSize: 16, fontWeight: "800" }}>
+            <Text style={{ fontWeight: "800", color: theme.text }}>
               {selected.title}
             </Text>
-            <Text style={{ marginTop: 4 }}>
-              {selected.location_name ?? "Pinned location"}
-            </Text>
-            <Text style={{ marginTop: 4 }}>
+            <Text style={{ color: theme.muted, marginTop: 4 }}>
               {formatStartsAt(selected.starts_at)}
             </Text>
 
-            <Text style={{ marginTop: 10, fontWeight: "700" }}>
-              Players:{" "}
-              {loadingCount
-                ? "…"
-                : playerCount !== null
-                  ? `${playerCount}/${selected.max_players}`
-                  : "—"}
+            <Text style={{ marginTop: 10, color: theme.text }}>
+              Players: {playerCount}/{selected.max_players}
             </Text>
 
-            <View style={{ flexDirection: "row", gap: 10, marginTop: 12 }}>
-              <Pressable
-                onPress={() => setSelected(null)}
-                style={{
-                  paddingVertical: 12,
-                  borderRadius: 12,
-                  backgroundColor: "#eee",
-                  flex: 1,
-                  alignItems: "center",
-                }}
-              >
-                <Text style={{ fontWeight: "700" }}>Close</Text>
-              </Pressable>
-
-              <Pressable
-                onPress={() => {
-                  if (isJoined) leaveSelectedGame();
-                  else joinSelectedGame();
-                }}
-                disabled={joining || loadingCount || isJoined === null}
-                style={{
-                  paddingVertical: 12,
-                  borderRadius: 12,
-                  backgroundColor: "#111",
-                  flex: 1,
-                  alignItems: "center",
-                  opacity:
-                    joining || loadingCount || isJoined === null ? 0.7 : 1,
-                }}
-              >
-                <Text style={{ color: "white", fontWeight: "800" }}>
-                  {joining ? "Working…" : isJoined ? "Leave" : "Join"}
-                </Text>
-              </Pressable>
-            </View>
+            <Pressable
+              onPress={() =>
+                isJoined ? leaveSelectedGame() : joinSelectedGame()
+              }
+              style={{
+                marginTop: 12,
+                paddingVertical: 12,
+                borderRadius: 12,
+                backgroundColor: theme.tint,
+                alignItems: "center",
+              }}
+            >
+              <Text style={{ color: "white", fontWeight: "800" }}>
+                {isJoined ? "Leave" : "Join"}
+              </Text>
+            </Pressable>
           </View>
         </View>
       )}
+
+      {/* CREATE GAME BUTTON */}
       <Pressable
-        onPress={() => router.push("../create")}
+        onPress={() => router.push("/create" as any)}
         style={{
           position: "absolute",
           right: 18,
@@ -477,15 +411,12 @@ export default function MapScreen() {
           width: 56,
           height: 56,
           borderRadius: 28,
-          backgroundColor: "#111",
+          backgroundColor: theme.tint,
           alignItems: "center",
           justifyContent: "center",
-          elevation: 6,
         }}
       >
-        <Text style={{ color: "white", fontSize: 28, fontWeight: "900" }}>
-          +
-        </Text>
+        <Text style={{ color: "white", fontSize: 28 }}>+</Text>
       </Pressable>
     </View>
   );

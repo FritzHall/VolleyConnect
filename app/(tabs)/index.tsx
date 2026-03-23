@@ -1,62 +1,75 @@
-// Expo Router navigation helper
+// Expo Router is used for navigation between screens
 import { router } from "expo-router";
 
-// React + hooks
+// React hooks
 import React, { useEffect, useState } from "react";
 
 // React Native UI components
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 
-// Supabase client for database access
-import { supabase } from "../../src/lib/supabase";
+// Theme imports
+import { Colors } from "@/constants/theme";
+import { useColorScheme } from "@/hooks/use-color-scheme";
 
-//////////////////////////////////////////////////////
-// HOME SCREEN
-//////////////////////////////////////////////////////
+// Supabase client for database + authentication
+import { supabase } from "../../src/lib/supabase";
 
 export default function HomeScreen() {
   //////////////////////////////////////////////////////
-  // STATE
+  // THEME SETUP
   //////////////////////////////////////////////////////
 
-  // Whether the app is currently loading data
+  // Detect device theme (light or dark)
+  const colorScheme = useColorScheme();
+
+  // Load correct colors from theme file
+  const theme = Colors[colorScheme ?? "light"];
+
+  //////////////////////////////////////////////////////
+  // STATE VARIABLES
+  //////////////////////////////////////////////////////
+
+  // Controls loading spinner while we fetch data
   const [loading, setLoading] = useState(true);
 
-  // Number of upcoming games (null = not logged in)
+  // Number of upcoming games from Supabase
+  // null = not logged in OR data not available
   const [upcomingCount, setUpcomingCount] = useState<number | null>(null);
 
   //////////////////////////////////////////////////////
-  // LOAD UPCOMING GAME COUNT ON MOUNT
+  // LOAD UPCOMING GAME COUNT WHEN SCREEN OPENS
   //////////////////////////////////////////////////////
 
   useEffect(() => {
     (async () => {
       setLoading(true);
 
-      // Check if user is authenticated
-      // If not logged in, we skip fetching games
+      // Check if user is logged in
+      // If not authenticated, RLS may block reading games
       const { data: sessionData } = await supabase.auth.getSession();
+
       if (!sessionData.session) {
+        // If user isn't logged in, don't fetch games
         setUpcomingCount(null);
         setLoading(false);
         return;
       }
 
-      // Current time in ISO format
-      // Used to filter out past games
+      // Current time — we only want future games
       const nowIso = new Date().toISOString();
 
-      // Count how many future active games exist
+      //////////////////////////////////////////////////////
+      // FETCH UPCOMING GAME COUNT FROM SUPABASE
+      //////////////////////////////////////////////////////
+
       const { count, error } = await supabase
         .from("games")
-        .select("id", { count: "exact", head: true })
-        .eq("status", "active")
-        .gte("starts_at", nowIso);
+        .select("id", { count: "exact", head: true }) // only count rows
+        .eq("status", "active") // only active games
+        .gte("starts_at", nowIso); // future games only
 
-      // If query succeeds, store the count
-      if (!error) {
-        setUpcomingCount(count ?? 0);
-      }
+      // If no error, update UI count
+      if (!error) setUpcomingCount(count ?? 0);
 
       setLoading(false);
     })();
@@ -67,26 +80,38 @@ export default function HomeScreen() {
   //////////////////////////////////////////////////////
 
   return (
-    <View style={{ flex: 1, padding: 18, justifyContent: "center" }}>
-      {/* App title */}
-      <Text style={{ fontSize: 34, fontWeight: "800" }}>VolleyConnect</Text>
-
-      {/* Short app description */}
-      <Text style={{ marginTop: 10, fontSize: 16, color: "#444" }}>
-        Find nearby pickup volleyball games, join fast, and play.
+    <View
+      style={{
+        flex: 1,
+        padding: 18,
+        justifyContent: "center",
+        backgroundColor: theme.background,
+      }}
+    >
+      {/* APP TITLE */}
+      <Text style={{ fontSize: 34, fontWeight: "800", color: theme.text }}>
+        VolleyConnect
       </Text>
 
-      {/* Upcoming games status */}
+      {/* TAGLINE */}
+      <Text style={{ marginTop: 10, fontSize: 16, color: theme.muted }}>
+        Find nearby pickup volleyball games, join fast, and play.
+      </Text>
+      {
+        //////////////////////////////////////////////////////
+        // UPCOMING GAME COUNT DISPLAY
+        //////////////////////////////////////////////////////
+      }
       <View style={{ marginTop: 20 }}>
         {loading ? (
-          // Loading indicator while fetching data
+          // Show spinner while loading Supabase data
           <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-            <ActivityIndicator />
-            <Text style={{ color: "#444" }}>Loading…</Text>
+            <ActivityIndicator color={theme.tint} />
+            <Text style={{ color: theme.muted }}>Loading…</Text>
           </View>
         ) : (
-          // Show count if logged in, otherwise prompt login
-          <Text style={{ color: "#444" }}>
+          // Show game count OR login message
+          <Text style={{ color: theme.muted }}>
             {upcomingCount === null
               ? "Log in to see nearby games."
               : `Upcoming games: ${upcomingCount}`}
@@ -94,13 +119,17 @@ export default function HomeScreen() {
         )}
       </View>
 
-      {/* Main action buttons */}
+      {
+        //////////////////////////////////////////////////////
+        // NAVIGATION BUTTONS
+        //////////////////////////////////////////////////////
+      }
       <View style={{ marginTop: 26, gap: 12 }}>
-        {/* Navigate to Auth screen */}
+        {/* LOGIN BUTTON */}
         <Pressable
           onPress={() => router.push("../auth")}
           style={{
-            backgroundColor: "#111",
+            backgroundColor: theme.tint,
             paddingVertical: 14,
             borderRadius: 14,
             alignItems: "center",
@@ -111,11 +140,11 @@ export default function HomeScreen() {
           </Text>
         </Pressable>
 
-        {/* Open Map tab */}
+        {/* OPEN MAP BUTTON */}
         <Pressable
           onPress={() => router.push("../(tabs)/map")}
           style={{
-            backgroundColor: "#111",
+            backgroundColor: theme.tint,
             paddingVertical: 14,
             borderRadius: 14,
             alignItems: "center",
@@ -126,24 +155,29 @@ export default function HomeScreen() {
           </Text>
         </Pressable>
 
-        {/* Navigate to Create Game screen */}
+        {/* CREATE GAME BUTTON */}
         <Pressable
-          onPress={() => router.push("../(tabs)/create")}
+          onPress={() => router.push("/create" as any)}
           style={{
-            backgroundColor: "#eee",
+            backgroundColor: theme.card,
             paddingVertical: 14,
             borderRadius: 14,
             alignItems: "center",
+            borderWidth: 1,
+            borderColor: theme.border,
           }}
         >
-          <Text style={{ color: "#111", fontWeight: "800", fontSize: 16 }}>
+          <Text style={{ color: theme.text, fontWeight: "800", fontSize: 16 }}>
             Create a Game
           </Text>
         </Pressable>
       </View>
-
-      {/* Helpful usage tip */}
-      <Text style={{ marginTop: 22, color: "#666", fontSize: 13 }}>
+      {
+        //////////////////////////////////////////////////////
+        // USER TIP TEXT
+        //////////////////////////////////////////////////////
+      }
+      <Text style={{ marginTop: 22, color: theme.muted, fontSize: 13 }}>
         Tip: Use the map to pan/zoom. Games refresh automatically based on
         what’s on-screen.
       </Text>

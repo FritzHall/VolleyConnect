@@ -1,6 +1,17 @@
+//////////////////////////////////////////////////////
+// IMPORTS
+//////////////////////////////////////////////////////
+
+// Expo location for GPS access
 import * as Location from "expo-location";
+
+// Expo Router navigation
 import { router } from "expo-router";
+
+// React core + hooks
 import React, { useEffect, useState } from "react";
+
+// React Native UI components
 import {
   Alert,
   Platform,
@@ -9,8 +20,19 @@ import {
   TextInput,
   View,
 } from "react-native";
+
+// Theme utilities
+import { Colors } from "@/constants/theme";
+import { useColorScheme } from "@/hooks/use-color-scheme";
+
+// Supabase client for database access
 import { supabase } from "../src/lib/supabase";
 
+//////////////////////////////////////////////////////
+// TYPE DEFINITIONS
+//////////////////////////////////////////////////////
+
+// Represents the visible map region
 type Region = {
   latitude: number;
   longitude: number;
@@ -18,8 +40,27 @@ type Region = {
   longitudeDelta: number;
 };
 
+//////////////////////////////////////////////////////
+// MAIN CREATE GAME SCREEN COMPONENT
+//////////////////////////////////////////////////////
+
 export default function CreateGameScreen() {
-  // Web fallback
+  //////////////////////////////////////////////////////
+  // THEME SETUP
+  //////////////////////////////////////////////////////
+
+  // Detect device theme (light or dark)
+  const colorScheme = useColorScheme();
+
+  // Load correct colors from theme file
+  const theme = Colors[colorScheme ?? "light"];
+
+  //////////////////////////////////////////////////////
+  // WEB FALLBACK
+  //////////////////////////////////////////////////////
+
+  // react-native-maps does not run on web
+  // If user opens the web version, show a fallback message
   if (Platform.OS === "web") {
     return (
       <View
@@ -28,33 +69,51 @@ export default function CreateGameScreen() {
           justifyContent: "center",
           alignItems: "center",
           padding: 20,
+          backgroundColor: theme.background,
         }}
       >
-        <Text style={{ fontSize: 18, fontWeight: "800" }}>
+        <Text style={{ fontSize: 18, fontWeight: "800", color: theme.text }}>
           Create Game is mobile-only
         </Text>
       </View>
     );
   }
 
+  // Load native maps only on iOS / Android
   const MapView = require("react-native-maps").default;
   const { Marker } = require("react-native-maps");
 
+  //////////////////////////////////////////////////////
+  // STATE VARIABLES
+  //////////////////////////////////////////////////////
+
+  // Controls loading state while location data is being fetched
   const [loading, setLoading] = useState(true);
+
+  // Controls loading state while game is being created
   const [saving, setSaving] = useState(false);
 
+  // Stores current map region
   const [region, setRegion] = useState<Region | null>(null);
+
+  // Stores pin location for the new game
   const [pin, setPin] = useState<{ lat: number; lng: number } | null>(null);
 
+  // Form fields
   const [title, setTitle] = useState("Pickup Volleyball");
   const [locationName, setLocationName] = useState("");
   const [startsAt, setStartsAt] = useState(""); // keep simple for MVP
   const [maxPlayers, setMaxPlayers] = useState("12");
 
+  //////////////////////////////////////////////////////
+  // GET LOCATION ON LOAD
+  //////////////////////////////////////////////////////
+
   useEffect(() => {
     (async () => {
       setLoading(true);
 
+      // Ask permission to access location
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
         setLoading(false);
@@ -62,6 +121,7 @@ export default function CreateGameScreen() {
         return;
       }
 
+      // Get user's current location
       const loc = await Location.getCurrentPositionAsync({});
       const initialRegion: Region = {
         latitude: loc.coords.latitude,
@@ -70,10 +130,11 @@ export default function CreateGameScreen() {
         longitudeDelta: 0.06,
       };
 
+      // Set map region + initial game pin
       setRegion(initialRegion);
       setPin({ lat: loc.coords.latitude, lng: loc.coords.longitude });
 
-      // default starts_at: 2 hours from now (ISO)
+      // Default game start time = 2 hours from now
       const twoHours = new Date(Date.now() + 2 * 60 * 60 * 1000);
       setStartsAt(twoHours.toISOString());
 
@@ -81,15 +142,24 @@ export default function CreateGameScreen() {
     })();
   }, []);
 
+  //////////////////////////////////////////////////////
+  // HELPER: PARSE MAX PLAYERS INPUT
+  //////////////////////////////////////////////////////
+
   function parseMaxPlayers() {
     const n = parseInt(maxPlayers, 10);
     if (Number.isNaN(n)) return null;
     return n;
   }
 
+  //////////////////////////////////////////////////////
+  // CREATE GAME
+  //////////////////////////////////////////////////////
+
   async function onCreate() {
     if (!pin || !region) return;
 
+    // Check if a user is signed in
     const { data: userData, error: userErr } = await supabase.auth.getUser();
     if (userErr || !userData.user) {
       Alert.alert("Not signed in", "Please sign in again.");
@@ -97,13 +167,14 @@ export default function CreateGameScreen() {
       return;
     }
 
+    // Validate max players
     const mp = parseMaxPlayers();
     if (!mp || mp < 2 || mp > 30) {
       Alert.alert("Max players", "Enter a number between 2 and 30.");
       return;
     }
 
-    // StartsAt: must be to a valid date
+    // StartsAt: must be a valid date
     const dt = new Date(startsAt);
     if (Number.isNaN(dt.getTime())) {
       Alert.alert(
@@ -115,6 +186,7 @@ export default function CreateGameScreen() {
 
     setSaving(true);
 
+    // Insert game into Supabase
     const { error } = await supabase.from("games").insert({
       host_id: userData.user.id,
       title: title.trim() || "Pickup Volleyball",
@@ -136,25 +208,43 @@ export default function CreateGameScreen() {
       return;
     }
 
+    // Success message + go back to map
     Alert.alert("Created!", "Your game is live on the map.");
-    router.back(); // goes back to Map tab
+    router.back();
   }
+
+  //////////////////////////////////////////////////////
+  // LOADING UI
+  //////////////////////////////////////////////////////
 
   if (loading || !region || !pin) {
     return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-        <Text>Loading…</Text>
+      <View
+        style={{
+          flex: 1,
+          justifyContent: "center",
+          alignItems: "center",
+          backgroundColor: theme.background,
+        }}
+      >
+        <Text style={{ color: theme.text }}>Loading…</Text>
       </View>
     );
   }
 
+  //////////////////////////////////////////////////////
+  // UI RENDER
+  //////////////////////////////////////////////////////
+
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1, backgroundColor: theme.background }}>
+      {/* MAP SECTION */}
       <View style={{ height: "55%" }}>
         <MapView
           style={{ flex: 1 }}
           initialRegion={region}
           onLongPress={(e: any) => {
+            // Move pin to new location when user long-presses map
             const c = e.nativeEvent.coordinate;
             setPin({ lat: c.latitude, lng: c.longitude });
           }}
@@ -163,6 +253,7 @@ export default function CreateGameScreen() {
             coordinate={{ latitude: pin.lat, longitude: pin.lng }}
             draggable
             onDragEnd={(e: any) => {
+              // Update pin location when marker is dragged
               const c = e.nativeEvent.coordinate;
               setPin({ lat: c.latitude, lng: c.longitude });
             }}
@@ -170,10 +261,11 @@ export default function CreateGameScreen() {
           />
         </MapView>
 
+        {/* MAP INSTRUCTION BANNER */}
         <View style={{ position: "absolute", top: 14, left: 14, right: 14 }}>
           <View
             style={{
-              backgroundColor: "rgba(0,0,0,0.7)",
+              backgroundColor: "rgba(37,99,235,0.9)",
               padding: 10,
               borderRadius: 12,
             }}
@@ -185,67 +277,92 @@ export default function CreateGameScreen() {
         </View>
       </View>
 
+      {/* FORM SECTION */}
       <View style={{ flex: 1, padding: 16, gap: 10 }}>
-        <Text style={{ fontSize: 22, fontWeight: "800" }}>Create Game</Text>
+        <Text style={{ fontSize: 22, fontWeight: "800", color: theme.text }}>
+          Create Game
+        </Text>
 
-        <Text style={{ fontWeight: "700" }}>Title</Text>
+        {/* TITLE INPUT */}
+        <Text style={{ fontWeight: "700", color: theme.text }}>Title</Text>
         <TextInput
           value={title}
           onChangeText={setTitle}
           style={{
             borderWidth: 1,
-            borderColor: "#ddd",
+            borderColor: theme.border,
             borderRadius: 12,
             padding: 12,
+            color: theme.text,
+            backgroundColor: theme.card,
           }}
+          placeholderTextColor={theme.muted}
         />
 
-        <Text style={{ fontWeight: "700" }}>Location name (optional)</Text>
+        {/* LOCATION NAME INPUT */}
+        <Text style={{ fontWeight: "700", color: theme.text }}>
+          Location name (optional)
+        </Text>
         <TextInput
           value={locationName}
           onChangeText={setLocationName}
           placeholder="Cary Park Courts"
+          placeholderTextColor={theme.muted}
           style={{
             borderWidth: 1,
-            borderColor: "#ddd",
+            borderColor: theme.border,
             borderRadius: 12,
             padding: 12,
+            color: theme.text,
+            backgroundColor: theme.card,
           }}
         />
 
-        <Text style={{ fontWeight: "700" }}>Starts at (ISO for now)</Text>
+        {/* START TIME INPUT */}
+        <Text style={{ fontWeight: "700", color: theme.text }}>
+          Starts at (ISO for now)
+        </Text>
         <TextInput
           value={startsAt}
           onChangeText={setStartsAt}
           placeholder="2026-02-20T18:00:00.000Z"
+          placeholderTextColor={theme.muted}
           autoCapitalize="none"
           style={{
             borderWidth: 1,
-            borderColor: "#ddd",
+            borderColor: theme.border,
             borderRadius: 12,
             padding: 12,
+            color: theme.text,
+            backgroundColor: theme.card,
           }}
         />
 
-        <Text style={{ fontWeight: "700" }}>Max players</Text>
+        {/* MAX PLAYERS INPUT */}
+        <Text style={{ fontWeight: "700", color: theme.text }}>
+          Max players
+        </Text>
         <TextInput
           value={maxPlayers}
           onChangeText={setMaxPlayers}
           keyboardType="number-pad"
           style={{
             borderWidth: 1,
-            borderColor: "#ddd",
+            borderColor: theme.border,
             borderRadius: 12,
             padding: 12,
+            color: theme.text,
+            backgroundColor: theme.card,
           }}
         />
 
+        {/* CREATE BUTTON */}
         <Pressable
           onPress={onCreate}
           disabled={saving}
           style={{
             marginTop: 6,
-            backgroundColor: "#111",
+            backgroundColor: theme.tint,
             paddingVertical: 14,
             borderRadius: 14,
             alignItems: "center",
@@ -257,16 +374,19 @@ export default function CreateGameScreen() {
           </Text>
         </Pressable>
 
+        {/* CANCEL BUTTON */}
         <Pressable
           onPress={() => router.back()}
           style={{
-            backgroundColor: "#eee",
+            backgroundColor: theme.card,
             paddingVertical: 14,
             borderRadius: 14,
             alignItems: "center",
+            borderWidth: 1,
+            borderColor: theme.border,
           }}
         >
-          <Text style={{ fontWeight: "800" }}>Cancel</Text>
+          <Text style={{ color: theme.text, fontWeight: "800" }}>Cancel</Text>
         </Pressable>
       </View>
     </View>

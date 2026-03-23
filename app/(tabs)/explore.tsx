@@ -4,6 +4,10 @@ import React, { useEffect, useState } from "react";
 // React Native UI components
 import { ActivityIndicator, FlatList, Text, View } from "react-native";
 
+// Theme imports
+import { Colors } from "@/constants/theme";
+import { useColorScheme } from "@/hooks/use-color-scheme";
+
 // Supabase client for database access
 import { supabase } from "../../src/lib/supabase";
 
@@ -24,6 +28,16 @@ type Game = {
 //////////////////////////////////////////////////////
 
 export default function ExploreScreen() {
+  //////////////////////////////////////////////////////
+  // THEME SETUP
+  //////////////////////////////////////////////////////
+
+  // Detect device theme (light or dark)
+  const colorScheme = useColorScheme();
+
+  // Load correct colors from theme file
+  const theme = Colors[colorScheme ?? "light"];
+
   //////////////////////////////////////////////////////
   // STATE VARIABLES
   //////////////////////////////////////////////////////
@@ -82,11 +96,20 @@ export default function ExploreScreen() {
   //////////////////////////////////////////////////////
 
   return (
-    <View style={{ flex: 1, padding: 18 }}>
+    <View
+      style={{
+        flex: 1,
+        padding: 18,
+        backgroundColor: theme.background,
+      }}
+    >
       {/* Screen Title */}
-      <Text style={{ fontSize: 22, fontWeight: "800" }}>Supabase Test</Text>
+      <Text style={{ fontSize: 22, fontWeight: "800", color: theme.text }}>
+        Supabase Test
+      </Text>
+
       {/* Description */}
-      <Text style={{ marginTop: 6, color: "#555" }}>
+      <Text style={{ marginTop: 6, color: theme.muted }}>
         Pulling up to 20 games from your database.
       </Text>
 
@@ -100,16 +123,18 @@ export default function ExploreScreen() {
             gap: 10,
           }}
         >
-          <ActivityIndicator />
-          <Text>Loading…</Text>
+          <ActivityIndicator color={theme.tint} />
+          <Text style={{ color: theme.text }}>Loading…</Text>
         </View>
       )}
+
       {/*ERROR STATE*/}
       {errorMsg && (
         <Text style={{ marginTop: 14, color: "crimson" }}>
           Error: {errorMsg}
         </Text>
       )}
+
       {/*GAME LIST*/}
       <FlatList
         style={{ marginTop: 14 }}
@@ -123,14 +148,16 @@ export default function ExploreScreen() {
             style={{
               paddingVertical: 10,
               borderBottomWidth: 1,
-              borderBottomColor: "#eee",
+              borderBottomColor: theme.border,
             }}
           >
             {/* Game title */}
-            <Text style={{ fontWeight: "700" }}>{item.title}</Text>
+            <Text style={{ fontWeight: "700", color: theme.text }}>
+              {item.title}
+            </Text>
 
             {/* Location + time */}
-            <Text style={{ color: "#555" }}>
+            <Text style={{ color: theme.muted }}>
               {item.location_name ?? "Pinned location"} •{" "}
               {new Date(item.starts_at).toLocaleString()}
             </Text>
@@ -142,7 +169,7 @@ export default function ExploreScreen() {
         // Shown if no games exist and not loading
         ListEmptyComponent={
           !loading ? (
-            <Text style={{ marginTop: 14, color: "#666" }}>
+            <Text style={{ marginTop: 14, color: theme.muted }}>
               No games found yet. Insert one in Supabase to test.
             </Text>
           ) : null

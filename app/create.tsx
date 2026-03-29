@@ -14,8 +14,10 @@ import React, { useEffect, useState } from "react";
 // React Native UI components
 import {
   Alert,
+  KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   Text,
   TextInput,
   View,
@@ -237,9 +239,12 @@ export default function CreateGameScreen() {
   //////////////////////////////////////////////////////
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.background }}>
+    <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: theme.background }}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
       {/* MAP SECTION */}
-      <View style={{ height: "55%" }}>
+      <View style={{ height: "42%" }}>
         <MapView
           style={{ flex: 1 }}
           initialRegion={region}
@@ -278,13 +283,20 @@ export default function CreateGameScreen() {
       </View>
 
       {/* FORM SECTION */}
-      <View style={{ flex: 1, padding: 16, gap: 10 }}>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
         <Text style={{ fontSize: 22, fontWeight: "800", color: theme.text }}>
           Create Game
         </Text>
 
         {/* TITLE INPUT */}
-        <Text style={{ fontWeight: "700", color: theme.text }}>Title</Text>
+        <Text style={{ marginTop: 10, fontWeight: "700", color: theme.text }}>
+          Title
+        </Text>
         <TextInput
           value={title}
           onChangeText={setTitle}
@@ -295,12 +307,13 @@ export default function CreateGameScreen() {
             padding: 12,
             color: theme.text,
             backgroundColor: theme.card,
+            marginTop: 6,
           }}
           placeholderTextColor={theme.muted}
         />
 
         {/* LOCATION NAME INPUT */}
-        <Text style={{ fontWeight: "700", color: theme.text }}>
+        <Text style={{ marginTop: 10, fontWeight: "700", color: theme.text }}>
           Location name (optional)
         </Text>
         <TextInput
@@ -315,11 +328,12 @@ export default function CreateGameScreen() {
             padding: 12,
             color: theme.text,
             backgroundColor: theme.card,
+            marginTop: 6,
           }}
         />
 
         {/* START TIME INPUT */}
-        <Text style={{ fontWeight: "700", color: theme.text }}>
+        <Text style={{ marginTop: 10, fontWeight: "700", color: theme.text }}>
           Starts at (ISO for now)
         </Text>
         <TextInput
@@ -335,11 +349,12 @@ export default function CreateGameScreen() {
             padding: 12,
             color: theme.text,
             backgroundColor: theme.card,
+            marginTop: 6,
           }}
         />
 
         {/* MAX PLAYERS INPUT */}
-        <Text style={{ fontWeight: "700", color: theme.text }}>
+        <Text style={{ marginTop: 10, fontWeight: "700", color: theme.text }}>
           Max players
         </Text>
         <TextInput
@@ -353,6 +368,7 @@ export default function CreateGameScreen() {
             padding: 12,
             color: theme.text,
             backgroundColor: theme.card,
+            marginTop: 6,
           }}
         />
 
@@ -361,7 +377,7 @@ export default function CreateGameScreen() {
           onPress={onCreate}
           disabled={saving}
           style={{
-            marginTop: 6,
+            marginTop: 16,
             backgroundColor: theme.tint,
             paddingVertical: 14,
             borderRadius: 14,
@@ -384,11 +400,12 @@ export default function CreateGameScreen() {
             alignItems: "center",
             borderWidth: 1,
             borderColor: theme.border,
+            marginTop: 10,
           }}
         >
           <Text style={{ color: theme.text, fontWeight: "800" }}>Cancel</Text>
         </Pressable>
-      </View>
-    </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }

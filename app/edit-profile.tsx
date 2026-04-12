@@ -12,6 +12,7 @@ import React, { useEffect, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
+    Image,
     KeyboardAvoidingView,
     Platform,
     Pressable,
@@ -20,6 +21,9 @@ import {
     TextInput,
     View,
 } from "react-native";
+
+// Expo image picker for selecting images from phone
+import * as ImagePicker from "expo-image-picker";
 
 // Theme utilities
 import { Colors } from "@/constants/theme";
@@ -53,6 +57,12 @@ export default function EditProfileScreen() {
   // Saving state while updates are sent to Supabase
   const [saving, setSaving] = useState(false);
 
+  // Uploading state while avatar image is sent to Storage
+  const [uploadingImage, setUploadingImage] = useState(false);
+
+  // Current signed-in user id
+  const [userId, setUserId] = useState<string | null>(null);
+
   // Form fields
   const [displayName, setDisplayName] = useState("");
   const [skillLevel, setSkillLevel] = useState("3");
@@ -78,7 +88,8 @@ export default function EditProfileScreen() {
         return;
       }
 
-      const userId = userData.user.id;
+      const uid = userData.user.id;
+      setUserId(uid);
 
       // Fetch current profile values
       const { data, error } = await supabase
@@ -86,7 +97,7 @@ export default function EditProfileScreen() {
         .select(
           "display_name, skill_level, preferred_position, bio, avatar_url",
         )
-        .eq("id", userId)
+        .eq("id", uid)
         .maybeSingle();
 
       if (error) {
@@ -106,6 +117,76 @@ export default function EditProfileScreen() {
       setLoading(false);
     })();
   }, []);
+
+  //////////////////////////////////////////////////////
+  // PICK + UPLOAD AVATAR IMAGE
+  //////////////////////////////////////////////////////
+
+  async function pickAndUploadImage() {
+    if (!userId) {
+      Alert.alert("Error", "Please sign in again.");
+      return;
+    }
+
+    // Ask for media library permission
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert("Permission needed", "Please allow photo library access.");
+      return;
+    }
+
+    // Open image library
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+
+    if (result.canceled) return;
+
+    try {
+      setUploadingImage(true);
+
+      const asset = result.assets[0];
+      const imageUri = asset.uri;
+
+      // Convert local image URI into binary data for upload
+      const response = await fetch(imageUri);
+      const arrayBuffer = await response.arrayBuffer();
+
+      // Use a predictable path: avatars/{userId}/avatar.jpg
+      const filePath = `${userId}/avatar.jpg`;
+
+      // Upload to Supabase Storage
+      const { error: uploadError } = await supabase.storage
+        .from("avatars")
+        .upload(filePath, arrayBuffer, {
+          contentType: asset.mimeType ?? "image/jpeg",
+          upsert: true,
+        });
+
+      if (uploadError) {
+        throw uploadError;
+      }
+
+      // Get public URL from uploaded file
+      const { data: publicUrlData } = supabase.storage
+        .from("avatars")
+        .getPublicUrl(filePath);
+
+      const publicUrl = publicUrlData.publicUrl;
+
+      // Save URL locally so preview updates immediately
+      setAvatarUrl(publicUrl);
+
+      Alert.alert("Success", "Profile image uploaded.");
+    } catch (err: any) {
+      Alert.alert("Upload failed", err.message ?? "Could not upload image.");
+    } finally {
+      setUploadingImage(false);
+    }
+  }
 
   //////////////////////////////////////////////////////
   // SAVE PROFILE
@@ -132,7 +213,7 @@ export default function EditProfileScreen() {
       return Alert.alert("Error", "Please sign in again.");
     }
 
-    const userId = userData.user.id;
+    const uid = userData.user.id;
 
     // Update profile row
     const { error } = await supabase
@@ -144,7 +225,7 @@ export default function EditProfileScreen() {
         bio: bio.trim() || null,
         avatar_url: avatarUrl.trim() || null,
       })
-      .eq("id", userId);
+      .eq("id", uid);
 
     setSaving(false);
 
@@ -202,6 +283,57 @@ export default function EditProfileScreen() {
         <Text style={{ marginTop: 6, color: theme.muted }}>
           Update your player information.
         </Text>
+
+        {/* AVATAR PREVIEW */}
+        <View style={{ alignItems: "center", marginTop: 20 }}>
+          {avatarUrl ? (
+            <Image
+              source={{ uri: avatarUrl }}
+              style={{
+                width: 100,
+                height: 100,
+                borderRadius: 50,
+                borderWidth: 2,
+                borderColor: theme.border,
+              }}
+            />
+          ) : (
+            <View
+              style={{
+                width: 100,
+                height: 100,
+                borderRadius: 50,
+                backgroundColor: theme.card,
+                borderWidth: 1,
+                borderColor: theme.border,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Text style={{ color: theme.muted }}>No Photo</Text>
+            </View>
+          )}
+        </View>
+
+        {/* UPLOAD PHOTO BUTTON */}
+        <Pressable
+          onPress={pickAndUploadImage}
+          disabled={uploadingImage}
+          style={{
+            marginTop: 14,
+            backgroundColor: theme.card,
+            paddingVertical: 14,
+            borderRadius: 14,
+            alignItems: "center",
+            borderWidth: 1,
+            borderColor: theme.border,
+            opacity: uploadingImage ? 0.7 : 1,
+          }}
+        >
+          <Text style={{ color: theme.text, fontWeight: "800" }}>
+            {uploadingImage ? "Uploading Photo…" : "Upload Photo"}
+          </Text>
+        </Pressable>
 
         {/* DISPLAY NAME */}
         <Text style={{ marginTop: 20, fontWeight: "700", color: theme.text }}>
@@ -282,27 +414,6 @@ export default function EditProfileScreen() {
             borderRadius: 12,
             padding: 12,
             minHeight: 110,
-            color: theme.text,
-            backgroundColor: theme.card,
-          }}
-        />
-
-        {/* AVATAR URL */}
-        <Text style={{ marginTop: 14, fontWeight: "700", color: theme.text }}>
-          Avatar URL
-        </Text>
-        <TextInput
-          value={avatarUrl}
-          onChangeText={setAvatarUrl}
-          placeholder="https://..."
-          placeholderTextColor={theme.muted}
-          autoCapitalize="none"
-          style={{
-            marginTop: 8,
-            borderWidth: 1,
-            borderColor: theme.border,
-            borderRadius: 12,
-            padding: 12,
             color: theme.text,
             backgroundColor: theme.card,
           }}

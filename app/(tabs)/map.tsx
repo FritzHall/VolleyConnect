@@ -1,7 +1,7 @@
 // Expo + React imports
 import * as Location from "expo-location";
 import { router } from "expo-router";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -10,6 +10,9 @@ import {
   Text,
   View,
 } from "react-native";
+
+// React Navigation focus hook
+import { useFocusEffect } from "@react-navigation/native";
 
 // Theme imports
 import { Colors } from "@/constants/theme";
@@ -136,37 +139,47 @@ export default function MapScreen() {
   // GET USER LOCATION ON LOAD
   //////////////////////////////////////////////////////
 
-  useEffect(() => {
-    (async () => {
-      setLoadingLocation(true);
+  useFocusEffect(
+    useCallback(() => {
+      const loadInitialMap = async () => {
+        // If we already have a region, just refresh the games
+        if (region) {
+          await fetchGamesInRegion(region);
+          return;
+        }
 
-      // Ask permission for location
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") {
+        setLoadingLocation(true);
+
+        // Ask permission for location
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== "granted") {
+          setLoadingLocation(false);
+          Alert.alert(
+            "Location required",
+            "Enable location to find games near you.",
+          );
+          return;
+        }
+
+        // Get user's GPS coordinates
+        const loc = await Location.getCurrentPositionAsync({});
+        const initial: Region = {
+          latitude: loc.coords.latitude,
+          longitude: loc.coords.longitude,
+          latitudeDelta: 0.06,
+          longitudeDelta: 0.06,
+        };
+
+        setRegion(initial);
         setLoadingLocation(false);
-        Alert.alert(
-          "Location required",
-          "Enable location to find games near you.",
-        );
-        return;
-      }
 
-      // Get user's GPS coordinates
-      const loc = await Location.getCurrentPositionAsync({});
-      const initial: Region = {
-        latitude: loc.coords.latitude,
-        longitude: loc.coords.longitude,
-        latitudeDelta: 0.06,
-        longitudeDelta: 0.06,
+        // Load games around user
+        await fetchGamesInRegion(initial);
       };
 
-      setRegion(initial);
-      setLoadingLocation(false);
-
-      // Load games around user
-      await fetchGamesInRegion(initial);
-    })();
-  }, []);
+      loadInitialMap();
+    }, [region]),
+  );
 
   //////////////////////////////////////////////////////
   // FETCH GAMES FROM SUPABASE BASED ON MAP VIEW
@@ -318,7 +331,29 @@ export default function MapScreen() {
   }
 
   //////////////////////////////////////////////////////
-  // UI RENDER
+  // REFRESH GAMES WHEN MAP MOVES
+  //////////////////////////////////////////////////////
+
+  function scheduleFetch(r: Region) {
+    if (fetchTimer.current) clearTimeout(fetchTimer.current);
+
+    fetchTimer.current = setTimeout(() => {
+      fetchGamesInRegion(r);
+    }, 350);
+  }
+
+  //////////////////////////////////////////////////////
+  // HEADER TEXT
+  //////////////////////////////////////////////////////
+
+  const headerText = useMemo(() => {
+    if (loadingLocation) return "Getting your location…";
+    if (loadingGames) return "Refreshing games…";
+    return `${games.length} game(s) in view`;
+  }, [loadingLocation, loadingGames, games.length]);
+
+  //////////////////////////////////////////////////////
+  // LOADING UI
   //////////////////////////////////////////////////////
 
   if (loadingLocation || !region) {
@@ -339,14 +374,45 @@ export default function MapScreen() {
     );
   }
 
+  //////////////////////////////////////////////////////
+  // UI RENDER
+  //////////////////////////////////////////////////////
+
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
+      {/* TOP STATUS BAR */}
+      <View
+        style={{
+          position: "absolute",
+          top: 14,
+          left: 14,
+          right: 14,
+          zIndex: 10,
+        }}
+      >
+        <View
+          style={{
+            backgroundColor: "rgba(37,99,235,0.9)",
+            borderRadius: 12,
+            padding: 10,
+          }}
+        >
+          <Text style={{ color: "white", fontWeight: "700" }}>
+            {headerText}
+          </Text>
+        </View>
+      </View>
+
       {/* MAP */}
       <MapView
         ref={(r: any) => (mapRef.current = r)}
         style={{ flex: 1 }}
         initialRegion={region}
         showsUserLocation
+        onRegionChangeComplete={(r: Region) => {
+          setRegion(r);
+          scheduleFetch(r);
+        }}
       >
         {games.map((g) => (
           <Marker
@@ -373,28 +439,31 @@ export default function MapScreen() {
             <Text style={{ fontWeight: "800", color: theme.text }}>
               {selected.title}
             </Text>
+
             <Text style={{ color: theme.muted, marginTop: 4 }}>
               {formatStartsAt(selected.starts_at)}
             </Text>
 
             <Text style={{ marginTop: 10, color: theme.text }}>
-              Players: {playerCount}/{selected.max_players}
+              Players: {loadingCount ? "…" : playerCount}/{selected.max_players}
             </Text>
 
             <Pressable
               onPress={() =>
                 isJoined ? leaveSelectedGame() : joinSelectedGame()
               }
+              disabled={joining || loadingCount || isJoined === null}
               style={{
                 marginTop: 12,
                 paddingVertical: 12,
                 borderRadius: 12,
                 backgroundColor: theme.tint,
                 alignItems: "center",
+                opacity: joining || loadingCount || isJoined === null ? 0.7 : 1,
               }}
             >
               <Text style={{ color: "white", fontWeight: "800" }}>
-                {isJoined ? "Leave" : "Join"}
+                {joining ? "Working…" : isJoined ? "Leave" : "Join"}
               </Text>
             </Pressable>
           </View>

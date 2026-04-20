@@ -6,7 +6,7 @@
 import { router } from "expo-router";
 
 // React core + hooks
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 
 // React Native UI components
 import {
@@ -17,6 +17,9 @@ import {
   Text,
   View,
 } from "react-native";
+
+// React Navigation focus hook
+import { useFocusEffect } from "@react-navigation/native";
 
 // Theme utilities
 import { Colors } from "@/constants/theme";
@@ -107,76 +110,80 @@ export default function ProfileScreen() {
   }
 
   //////////////////////////////////////////////////////
-  // LOAD PROFILE DATA
+  // LOAD PROFILE DATA (AUTO REFRESH ON SCREEN FOCUS)
   //////////////////////////////////////////////////////
 
-  useEffect(() => {
-    (async () => {
-      setLoading(true);
+  useFocusEffect(
+    useCallback(() => {
+      const loadProfile = async () => {
+        setLoading(true);
 
-      // Get current signed-in user
-      const { data: userData, error: userError } =
-        await supabase.auth.getUser();
+        // Get current signed-in user
+        const { data: userData, error: userError } =
+          await supabase.auth.getUser();
 
-      if (userError || !userData.user) {
+        if (userError || !userData.user) {
+          setLoading(false);
+          return;
+        }
+
+        const user = userData.user;
+
+        // Save user email from auth
+        setEmail(user.email ?? null);
+
+        //////////////////////////////////////////////////////
+        // FETCH PROFILE TABLE DATA
+        //////////////////////////////////////////////////////
+
+        const { data: profileData, error: profileError } = await supabase
+          .from("profiles")
+          .select(
+            "display_name, skill_level, preferred_position, bio, avatar_url",
+          )
+          .eq("id", user.id)
+          .maybeSingle();
+
+        if (!profileError && profileData) {
+          setDisplayName(profileData.display_name ?? "Player");
+          setSkillLevel(profileData.skill_level ?? null);
+          setPreferredPosition(profileData.preferred_position ?? null);
+          setBio(profileData.bio ?? null);
+          setAvatarUrl(profileData.avatar_url ?? null);
+        }
+
+        //////////////////////////////////////////////////////
+        // FETCH HOSTED GAME COUNT
+        //////////////////////////////////////////////////////
+
+        const { count: hosted, error: hostedError } = await supabase
+          .from("games")
+          .select("id", { count: "exact", head: true })
+          .eq("host_id", user.id);
+
+        if (!hostedError) {
+          setHostedCount(hosted ?? 0);
+        }
+
+        //////////////////////////////////////////////////////
+        // FETCH JOINED GAME COUNT
+        //////////////////////////////////////////////////////
+
+        const { count: joined, error: joinedError } = await supabase
+          .from("game_players")
+          .select("user_id", { count: "exact", head: true })
+          .eq("user_id", user.id);
+
+        if (!joinedError) {
+          setJoinedCount(joined ?? 0);
+        }
+
         setLoading(false);
-        return;
-      }
+      };
 
-      const user = userData.user;
-
-      // Save user email from auth
-      setEmail(user.email ?? null);
-
-      //////////////////////////////////////////////////////
-      // FETCH PROFILE TABLE DATA
-      //////////////////////////////////////////////////////
-
-      const { data: profileData, error: profileError } = await supabase
-        .from("profiles")
-        .select(
-          "display_name, skill_level, preferred_position, bio, avatar_url",
-        )
-        .eq("id", user.id)
-        .maybeSingle();
-
-      if (!profileError && profileData) {
-        setDisplayName(profileData.display_name ?? "Player");
-        setSkillLevel(profileData.skill_level ?? null);
-        setPreferredPosition(profileData.preferred_position ?? null);
-        setBio(profileData.bio ?? null);
-        setAvatarUrl(profileData.avatar_url ?? null);
-      }
-
-      //////////////////////////////////////////////////////
-      // FETCH HOSTED GAME COUNT
-      //////////////////////////////////////////////////////
-
-      const { count: hosted, error: hostedError } = await supabase
-        .from("games")
-        .select("id", { count: "exact", head: true })
-        .eq("host_id", user.id);
-
-      if (!hostedError) {
-        setHostedCount(hosted ?? 0);
-      }
-
-      //////////////////////////////////////////////////////
-      // FETCH JOINED GAME COUNT
-      //////////////////////////////////////////////////////
-
-      const { count: joined, error: joinedError } = await supabase
-        .from("game_players")
-        .select("user_id", { count: "exact", head: true })
-        .eq("user_id", user.id);
-
-      if (!joinedError) {
-        setJoinedCount(joined ?? 0);
-      }
-
-      setLoading(false);
-    })();
-  }, []);
+      loadProfile();
+    }, []),
+  );
 
   //////////////////////////////////////////////////////
   // SIGN OUT FUNCTION
